@@ -13,7 +13,6 @@ import { DashboardModel, PanelModel } from '../state';
 import { CoreEvents } from 'app/types';
 import { PanelEvents } from '@grafana/data';
 import { panelAdded, panelRemoved } from '../state/PanelModel';
-// import { css, cx } from 'emotion';
 
 let lastGridWidth = 1200;
 let ignoreNextWidthChange = false;
@@ -99,10 +98,13 @@ export interface Props {
 
 export interface State {
   layouts: ReactGridLayout.Layout[];
-  gridPos: ReactGridLayout.Layout;
 }
 
 export class DashboardGrid extends PureComponent<Props, State> {
+  state: State = {
+    layouts: [],
+  };
+
   panelMap: { [id: string]: PanelModel };
   panelRef: { [id: string]: HTMLElement } = {};
 
@@ -194,7 +196,7 @@ export class DashboardGrid extends PureComponent<Props, State> {
     this.onLayoutChange(layout);
   };
 
-  onResize: ItemCallback = (layout, oldItem, newItem, lol, lol2, lol3,) => {
+  onResize: ItemCallback = (layout, oldItem, newItem) => {
     this.panelMap[newItem.i].updateGridPos(newItem);
   };
 
@@ -245,124 +247,122 @@ export class DashboardGrid extends PureComponent<Props, State> {
     return !this.props.dashboard.otherPanelInFullscreen(panel);
   };
 
-  handleHoverIn = (id: string, event: any ) => {
-    const { dashboard } = this.props;
-    const layout = this.buildLayout();
-    const element = this.panelRef[id];
-    const newItem = layout.find(item => item.i === id);
-    const prevState = Object.assign({}, newItem);;
+  handleClick = () => {
+    console.log('yes');
+    const layout = [];
+    for (const panel of this.props.dashboard.panels) {
+      const stringId = panel.id.toString();
 
-    if ((newItem.x + (newItem.w)*(dashboard.dynamicView.horizontal)) > 24) {
-      newItem.x = 24 - (dashboard.dynamicView.horizontal)*(newItem.w);
-      newItem.y = newItem.y - 0.000001;
-      newItem.h = newItem.h * dashboard.dynamicView.vertical;
-      newItem.w = newItem.w * dashboard.dynamicView.horizontal;
-    }else {
-      newItem.h = newItem.h * dashboard.dynamicView.vertical;
-      newItem.w = newItem.w * dashboard.dynamicView.horizontal;
+      if (!panel.gridPos) {
+        console.log('panel without gridpos');
+        continue;
+      }
+
+      const panelPos: any = {
+        i: stringId,
+        x: panel.gridPos.x,
+        y: panel.gridPos.y,
+        w: panel.gridPos.w,
+        h: panel.gridPos.h,
+      };
+
+      layout.push(panelPos);
+    }
+    this.setState({ layouts: layout });
+  };
+
+  filter = (state: string) => {
+    const filteredLayout = [];
+    const layout = [];
+    const originalLayout = this.state.layouts;
+
+    if (state === 'All') {
+      this.onLayoutChange(originalLayout);
+      return;
     }
 
-    this.onResizeStop(layout, newItem, newItem, newItem, event, element);
-    this.setState({ layouts: layout, gridPos: prevState });
+    for (const panel of this.props.dashboard.panels) {
+      const id = panel.id.toString();
+      const originalLayoutCopy = originalLayout.slice();
+      const itemLayout = originalLayoutCopy.find(item => item.i === id);
+      const item = Object.assign({}, itemLayout);
+      if (state !== panel.panelState) {
+        item.x = 0;
+        item.y = 0;
+        item.h = 0.01;
+        item.w = 0.01;
+        filteredLayout.push(item);
+      } else {
+        layout.push(item);
+      }
+    }
+
+    for (const panel of layout) {
+      const index = layout.indexOf(panel);
+      const panelPerRow = 24 / panel.w;
+      panel.x = (index % panelPerRow) * panel.w;
+      panel.y = 0;
+    }
+
+    this.onLayoutChange(filteredLayout);
+    this.onLayoutChange(layout);
   };
-
-  handleHoverOut = (id: string, event: any ) => {
-    const { dashboard } = this.props;
-    const prevLayout = this.state.layouts;
-    const newItem = prevLayout.find(item => item.i === id);
-    const element = this.panelRef[id];
-    const prevState = this.state.gridPos;
-
-    newItem.x = prevState.x;
-    newItem.y = prevState.y;
-    newItem.h = prevState.h;
-    newItem.w = prevState.w;
-
-    this.onResizeStop(prevLayout, newItem, newItem, newItem, event, element);
-    this.setState({ layouts: [] , gridPos: {x:0,y:0,h:0,w:0} });
-  };
-
-  // sortPanel = (id: string) => {
-  //   const panels = [];
-  // }
 
   renderPanels() {
     const panelElements = [];
-    if (this.props.dashboard.dynamicView.enable) {
-      for (const panel of this.props.dashboard.panels) {
-        const panelClasses = classNames({ 'react-grid-item--fullscreen': panel.fullscreen});
-        const id = panel.id.toString();
-        panel.isInView = this.isInView(panel);
+    for (const panel of this.props.dashboard.panels) {
+      const panelClasses = classNames({ 'react-grid-item--fullscreen': panel.fullscreen });
+      const id = panel.id.toString();
+      panel.isInView = this.isInView(panel);
 
-        panelElements.push(
-          <div
-            key={id}
-            className={panelClasses}
-            id={'panel-' + id}
-            ref={elem => {
-              this.panelRef[id] = elem;
-            }}
-            onMouseEnter={ (event) => {this.handleHoverIn(id, event );} }
-            onMouseLeave={ (event) => {this.handleHoverOut(id, event );}  }
-          >
-            <DashboardPanel
-              panel={panel}
-              dashboard={this.props.dashboard}
-              isEditing={panel.isEditing}
-              isFullscreen={panel.fullscreen}
-              isInView={panel.isInView}
-            />
-          </div>
-        );
-      }
-
-    }else {
-      for (const panel of this.props.dashboard.panels) {
-        const panelClasses = classNames({ 'react-grid-item--fullscreen': panel.fullscreen});
-        const id = panel.id.toString();
-        panel.isInView = this.isInView(panel);
-
-        panelElements.push(
-          <div
-            key={id}
-            className={panelClasses}
-            id={'panel-' + id}
-            ref={elem => {
-              this.panelRef[id] = elem;
-            }}
-          >
-            <DashboardPanel
-              panel={panel}
-              dashboard={this.props.dashboard}
-              isEditing={panel.isEditing}
-              isFullscreen={panel.fullscreen}
-              isInView={panel.isInView}
-            />
-          </div>
-        );
-      }
+      panelElements.push(
+        <div
+          key={id}
+          className={panelClasses}
+          id={'panel-' + id}
+          ref={elem => {
+            this.panelRef[id] = elem;
+          }}
+        >
+          <DashboardPanel
+            panel={panel}
+            dashboard={this.props.dashboard}
+            isEditing={panel.isEditing}
+            isFullscreen={panel.fullscreen}
+            isInView={panel.isInView}
+          />
+        </div>
+      );
     }
+
     return panelElements;
   }
 
   render() {
+    console.log('Test');
     const { dashboard, isFullscreen } = this.props;
-
     return (
-      <SizedReactLayoutGrid
-        className={classNames({ layout: true })}
-        layout={this.buildLayout()}
-        isResizable={dashboard.meta.canEdit}
-        isDraggable={dashboard.meta.canEdit}
-        onLayoutChange={this.onLayoutChange}
-        onWidthChange={this.onWidthChange}
-        onDragStop={this.onDragStop}
-        onResize={this.onResize}
-        onResizeStop={this.onResizeStop}
-        isFullscreen={isFullscreen}
-      >
-        {this.renderPanels()}
-      </SizedReactLayoutGrid>
+      <>
+        <button onClick={this.handleClick}>Click me</button>
+        <button onClick={() => this.filter('All')}>All</button>
+        <button onClick={() => this.filter('error-state')}>error-state</button>
+        <button onClick={() => this.filter('warn-state')}>warn-state</button>
+        <button onClick={() => this.filter('ok-state')}>ok-state</button>
+        <SizedReactLayoutGrid
+          className={classNames({ layout: true })}
+          layout={this.buildLayout()}
+          isResizable={dashboard.meta.canEdit}
+          isDraggable={dashboard.meta.canEdit}
+          onLayoutChange={this.onLayoutChange}
+          onWidthChange={this.onWidthChange}
+          onDragStop={this.onDragStop}
+          onResize={this.onResize}
+          onResizeStop={this.onResizeStop}
+          isFullscreen={isFullscreen}
+        >
+          {this.renderPanels()}
+        </SizedReactLayoutGrid>
+      </>
     );
   }
 }

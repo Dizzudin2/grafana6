@@ -108,6 +108,7 @@ export class PanelModel {
   datasource: string;
   thresholds?: any;
   pluginVersion?: string;
+  panelState?: string;
 
   snapshotData?: DataQueryResponseData[];
   timeFrom?: any;
